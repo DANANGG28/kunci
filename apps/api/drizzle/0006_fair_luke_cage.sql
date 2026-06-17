@@ -1,0 +1,1 @@
+ALTER TABLE "leads" ALTER COLUMN "company_website" DROP NOT NULL;

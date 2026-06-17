@@ -14,8 +14,8 @@ import {
 	Activity,
 	CheckCircle2,
 	Clock,
-	type LucideIcon,
 	Loader2,
+	type LucideIcon,
 	Search,
 	Sparkles,
 	XCircle,
@@ -194,10 +194,7 @@ function FilterPill({
 				color: active ? tone : "var(--color-foreground)",
 			}}
 		>
-			<span
-				className="size-1.5 rounded-full"
-				style={{ background: tone }}
-			/>
+			<span className="size-1.5 rounded-full" style={{ background: tone }} />
 			{label}
 			<span
 				className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded-full"
@@ -458,8 +455,7 @@ function LogsPage() {
 							className="text-xs mt-1"
 							style={{ color: "var(--color-muted-foreground)" }}
 						>
-							{filtered.length}{" "}
-							{filter === "all" ? "total" : filter} entr
+							{filtered.length} {filter === "all" ? "total" : filter} entr
 							{filtered.length === 1 ? "y" : "ies"}
 							{search && ` matching "${search}"`}
 						</p>
@@ -472,10 +468,7 @@ function LogsPage() {
 							style={{ borderColor: "var(--color-border)" }}
 						>
 							{Array.from({ length: 8 }).map((_, i) => (
-								<div
-									key={`sk-${i}`}
-									className="p-4 flex items-start gap-3"
-								>
+								<div key={`sk-${i}`} className="p-4 flex items-start gap-3">
 									<Skeleton className="size-8 rounded-lg shrink-0" />
 									<div className="flex-1 space-y-2">
 										<Skeleton className="h-4 w-2/3" />

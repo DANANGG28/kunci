@@ -1,5 +1,6 @@
 import type { EnrichLeadResult } from "#/application/lead/enrich-lead.ts"
 import type { CompanyResearchResult } from "#/application/research/research-company.ts"
+import { buildTalentResearchContext } from "#/application/research/talent-context-builder.ts"
 import type { BehaviorAnalysis } from "#/domain/behavior-analysis/behavior-analysis.ts"
 import type { CreateLeadInput, Lead, ReplyStatus } from "#/domain/lead/lead.ts"
 import type { Logger } from "#/domain/ports/logger.ts"
@@ -82,89 +83,105 @@ export function makeRunOutboundPipelineUseCase(deps: PipelineDeps) {
 		}
 
 		try {
-			// Step 2: Self-enrichment (homepage scrape → AI structured extract)
-			const enrichStepId = await deps.tracker.startStep(
-				lead.id,
-				"enrich",
-				`Enriching lead from homepage: ${lead.companyWebsite}`,
-				{ url: lead.companyWebsite, provider: "Deepcrawl + OpenRouter" },
-			)
-			try {
-				const enrichResult = await deps.enrichLead(lead)
-				lead = enrichResult.updatedLead
-				await deps.tracker.completeStep(enrichStepId, {
-					country: lead.country,
-					language: lead.language,
-					industry: lead.companyIndustry,
-					companySize: lead.companySize,
-				})
-			} catch (error) {
-				const msg = errorMessage(error)
-				// Enrichment is best-effort — log + continue. The downstream
-				// research/analyze steps still work without enriched fields.
-				await deps.tracker.failStep(enrichStepId, msg, {
-					url: lead.companyWebsite,
-				})
-				deps.logger.warn(
-					{ leadId: lead.id, err: error },
-					"Enrichment failed; continuing pipeline",
-				)
-			}
-
-			// Step 3: Scrape company website (research)
-			const scrapeStepId = await deps.tracker.startStep(
-				lead.id,
-				"scrape",
-				`Scraping company website: ${lead.companyWebsite}`,
-				{ url: lead.companyWebsite, provider: "Deepcrawl" },
-			)
-
+			const isTalent = lead.segment === "talent"
 			let research: CompanyResearchResult
-			try {
-				research = await deps.researchCompany(lead)
-				await deps.tracker.completeStep(scrapeStepId, {
-					url: lead.companyWebsite,
-					hasMarkdown: !!research.rawMarkdown,
-					linkedinStatus: research.linkedinProfile?.status ?? "not_provided",
+
+			if (isTalent) {
+				// ── Talent path: skip enrichment & scraping, use lead metadata ──
+				const talentStepId = await deps.tracker.startStep(
+					lead.id,
+					"build_profile",
+					"Building talent profile from lead metadata (no website)",
+					{ segment: "talent" },
+				)
+				research = buildTalentResearchContext(lead)
+				await deps.tracker.completeStep(talentStepId, {
+					profileLength: research.companyProfile.length,
+					segment: "talent",
 				})
-			} catch (error) {
-				const msg = errorMessage(error)
-				await deps.tracker.failStep(scrapeStepId, msg, {
-					url: lead.companyWebsite,
+			} else {
+				// ── Enterprise/Agency path: full enrichment + scraping ──
+				// Step 2: Self-enrichment (homepage scrape → AI structured extract)
+				const enrichStepId = await deps.tracker.startStep(
+					lead.id,
+					"enrich",
+					`Enriching lead from homepage: ${lead.companyWebsite}`,
+					{ url: lead.companyWebsite, provider: "Deepcrawl + OpenRouter" },
+				)
+				try {
+					const enrichResult = await deps.enrichLead(lead)
+					lead = enrichResult.updatedLead
+					await deps.tracker.completeStep(enrichStepId, {
+						country: lead.country,
+						language: lead.language,
+						industry: lead.companyIndustry,
+						companySize: lead.companySize,
+					})
+				} catch (error) {
+					const msg = errorMessage(error)
+					await deps.tracker.failStep(enrichStepId, msg, {
+						url: lead.companyWebsite,
+					})
+					deps.logger.warn(
+						{ leadId: lead.id, err: error },
+						"Enrichment failed; continuing pipeline",
+					)
+				}
+
+				// Step 3: Scrape company website (research)
+				const scrapeStepId = await deps.tracker.startStep(
+					lead.id,
+					"scrape",
+					`Scraping company website: ${lead.companyWebsite}`,
+					{ url: lead.companyWebsite, provider: "Deepcrawl" },
+				)
+
+				try {
+					research = await deps.researchCompany(lead)
+					await deps.tracker.completeStep(scrapeStepId, {
+						url: lead.companyWebsite,
+						hasMarkdown: !!research.rawMarkdown,
+						linkedinStatus: research.linkedinProfile?.status ?? "not_provided",
+					})
+				} catch (error) {
+					const msg = errorMessage(error)
+					await deps.tracker.failStep(scrapeStepId, msg, {
+						url: lead.companyWebsite,
+					})
+					throw error
+				}
+
+				// Step 4: AI Analyze website content (inside researchCompany)
+				const aiAnalyzeStepId = await deps.tracker.startStep(
+					lead.id,
+					"analyze_website",
+					"Calling AI Provider: https://openrouter.ai — Website Analysis",
+					{
+						provider: "OpenRouter",
+						model: "openai/o3-mini",
+						apiUrl: "https://openrouter.ai/api/v1/chat/completions",
+					},
+				)
+				await deps.tracker.completeStep(aiAnalyzeStepId, {
+					brandName: research.websiteAnalysis.brandName,
+					industry: research.websiteAnalysis.industryCategory,
 				})
-				throw error
+
+				// Step 5: AI Build company profile (inside researchCompany)
+				const profileStepId = await deps.tracker.startStep(
+					lead.id,
+					"build_profile",
+					"Calling AI Provider: https://openrouter.ai — Company Profiler",
+					{
+						provider: "OpenRouter",
+						model: "openai/gpt-4.1-mini",
+						apiUrl: "https://openrouter.ai/api/v1/chat/completions",
+					},
+				)
+				await deps.tracker.completeStep(profileStepId, {
+					profileLength: research.companyProfile.length,
+				})
 			}
-
-			// Step 4: AI Analyze website content (inside researchCompany)
-			const aiAnalyzeStepId = await deps.tracker.startStep(
-				lead.id,
-				"analyze_website",
-				"Calling AI Provider: https://openrouter.ai — Website Analysis",
-				{
-					provider: "OpenRouter",
-					model: "openai/o3-mini",
-					apiUrl: "https://openrouter.ai/api/v1/chat/completions",
-				},
-			)
-			await deps.tracker.completeStep(aiAnalyzeStepId, {
-				brandName: research.websiteAnalysis.brandName,
-				industry: research.websiteAnalysis.industryCategory,
-			})
-
-			// Step 5: AI Build company profile (inside researchCompany)
-			const profileStepId = await deps.tracker.startStep(
-				lead.id,
-				"build_profile",
-				"Calling AI Provider: https://openrouter.ai — Company Profiler",
-				{
-					provider: "OpenRouter",
-					model: "openai/gpt-4.1-mini",
-					apiUrl: "https://openrouter.ai/api/v1/chat/completions",
-				},
-			)
-			await deps.tracker.completeStep(profileStepId, {
-				profileLength: research.companyProfile.length,
-			})
 
 			// Step 6: Analyze lead behavior (P1)
 			const behaviorStepId = await deps.tracker.startStep(
@@ -250,87 +267,105 @@ export function makeRunOutboundForExistingLeadUseCase(
 		)
 
 		try {
-			// Step 0: Self-enrichment (homepage scrape → AI structured extract)
-			const enrichStepId = await deps.tracker.startStep(
-				lead.id,
-				"enrich",
-				`Enriching lead from homepage: ${lead.companyWebsite}`,
-				{ url: lead.companyWebsite, provider: "Deepcrawl + OpenRouter" },
-			)
-			try {
-				const enrichResult = await deps.enrichLead(lead)
-				lead = enrichResult.updatedLead
-				await deps.tracker.completeStep(enrichStepId, {
-					country: lead.country,
-					language: lead.language,
-					industry: lead.companyIndustry,
-					companySize: lead.companySize,
-				})
-			} catch (error) {
-				const msg = errorMessage(error)
-				await deps.tracker.failStep(enrichStepId, msg, {
-					url: lead.companyWebsite,
-				})
-				deps.logger.warn(
-					{ leadId: lead.id, err: error },
-					"Enrichment failed; continuing pipeline",
-				)
-			}
-
-			// Step 1: Scrape company website
-			const scrapeStepId = await deps.tracker.startStep(
-				lead.id,
-				"scrape",
-				`Scraping company website: ${lead.companyWebsite}`,
-				{ url: lead.companyWebsite, provider: "Deepcrawl" },
-			)
-
+			const isTalent = lead.segment === "talent"
 			let research: CompanyResearchResult
-			try {
-				research = await deps.researchCompany(lead)
-				await deps.tracker.completeStep(scrapeStepId, {
-					url: lead.companyWebsite,
-					hasMarkdown: !!research.rawMarkdown,
-					linkedinStatus: research.linkedinProfile?.status ?? "not_provided",
+
+			if (isTalent) {
+				// ── Talent path: skip enrichment & scraping, use lead metadata ──
+				const talentStepId = await deps.tracker.startStep(
+					lead.id,
+					"build_profile",
+					"Building talent profile from lead metadata (no website)",
+					{ segment: "talent" },
+				)
+				research = buildTalentResearchContext(lead)
+				await deps.tracker.completeStep(talentStepId, {
+					profileLength: research.companyProfile.length,
+					segment: "talent",
 				})
-			} catch (error) {
-				const msg = errorMessage(error)
-				await deps.tracker.failStep(scrapeStepId, msg, {
-					url: lead.companyWebsite,
+			} else {
+				// ── Enterprise/Agency path: full enrichment + scraping ──
+				// Step 0: Self-enrichment (homepage scrape → AI structured extract)
+				const enrichStepId = await deps.tracker.startStep(
+					lead.id,
+					"enrich",
+					`Enriching lead from homepage: ${lead.companyWebsite}`,
+					{ url: lead.companyWebsite, provider: "Deepcrawl + OpenRouter" },
+				)
+				try {
+					const enrichResult = await deps.enrichLead(lead)
+					lead = enrichResult.updatedLead
+					await deps.tracker.completeStep(enrichStepId, {
+						country: lead.country,
+						language: lead.language,
+						industry: lead.companyIndustry,
+						companySize: lead.companySize,
+					})
+				} catch (error) {
+					const msg = errorMessage(error)
+					await deps.tracker.failStep(enrichStepId, msg, {
+						url: lead.companyWebsite,
+					})
+					deps.logger.warn(
+						{ leadId: lead.id, err: error },
+						"Enrichment failed; continuing pipeline",
+					)
+				}
+
+				// Step 1: Scrape company website
+				const scrapeStepId = await deps.tracker.startStep(
+					lead.id,
+					"scrape",
+					`Scraping company website: ${lead.companyWebsite}`,
+					{ url: lead.companyWebsite, provider: "Deepcrawl" },
+				)
+
+				try {
+					research = await deps.researchCompany(lead)
+					await deps.tracker.completeStep(scrapeStepId, {
+						url: lead.companyWebsite,
+						hasMarkdown: !!research.rawMarkdown,
+						linkedinStatus: research.linkedinProfile?.status ?? "not_provided",
+					})
+				} catch (error) {
+					const msg = errorMessage(error)
+					await deps.tracker.failStep(scrapeStepId, msg, {
+						url: lead.companyWebsite,
+					})
+					throw error
+				}
+
+				// Step 2: AI Analyze website content
+				const aiAnalyzeStepId = await deps.tracker.startStep(
+					lead.id,
+					"analyze_website",
+					"Calling AI Provider: https://openrouter.ai — Website Analysis",
+					{
+						provider: "OpenRouter",
+						model: "openai/o3-mini",
+						apiUrl: "https://openrouter.ai/api/v1/chat/completions",
+					},
+				)
+				await deps.tracker.completeStep(aiAnalyzeStepId, {
+					brandName: research.websiteAnalysis.brandName,
+					industry: research.websiteAnalysis.industryCategory,
 				})
-				throw error
+
+				// Step 3: AI Build company profile
+				const profileStepId = await deps.tracker.startStep(
+					lead.id,
+					"build_profile",
+					"Calling AI Provider: https://openrouter.ai — Company Profiler",
+					{
+						provider: "OpenRouter",
+						model: "openai/gpt-4.1-mini",
+						apiUrl: "https://openrouter.ai/api/v1/chat/completions",
+					},
+				)
+				await deps.tracker.completeStep(profileStepId, {
+					profileLength: research.companyProfile.length,
+				})
 			}
-
-			// Step 2: AI Analyze website content
-			const aiAnalyzeStepId = await deps.tracker.startStep(
-				lead.id,
-				"analyze_website",
-				"Calling AI Provider: https://openrouter.ai — Website Analysis",
-				{
-					provider: "OpenRouter",
-					model: "openai/o3-mini",
-					apiUrl: "https://openrouter.ai/api/v1/chat/completions",
-				},
-			)
-			await deps.tracker.completeStep(aiAnalyzeStepId, {
-				brandName: research.websiteAnalysis.brandName,
-				industry: research.websiteAnalysis.industryCategory,
-			})
-
-			// Step 3: AI Build company profile
-			const profileStepId = await deps.tracker.startStep(
-				lead.id,
-				"build_profile",
-				"Calling AI Provider: https://openrouter.ai — Company Profiler",
-				{
-					provider: "OpenRouter",
-					model: "openai/gpt-4.1-mini",
-					apiUrl: "https://openrouter.ai/api/v1/chat/completions",
-				},
-			)
-			await deps.tracker.completeStep(profileStepId, {
-				profileLength: research.companyProfile.length,
-			})
 
 			// Step 4: Analyze lead behavior
 			const behaviorStepId = await deps.tracker.startStep(

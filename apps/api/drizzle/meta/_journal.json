@@ -1,41 +1,55 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1777383232693,
-      "tag": "0000_high_zeigeist",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1777543250771,
-      "tag": "0001_glamorous_firebird",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1777570987602,
-      "tag": "0002_abandoned_landau",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1778512201164,
-      "tag": "0003_ordinary_scourge",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1778561661816,
-      "tag": "0004_curly_otto_octavius",
-      "breakpoints": true
-    }
-  ]
+	"version": "7",
+	"dialect": "postgresql",
+	"entries": [
+		{
+			"idx": 0,
+			"version": "7",
+			"when": 1777383232693,
+			"tag": "0000_high_zeigeist",
+			"breakpoints": true
+		},
+		{
+			"idx": 1,
+			"version": "7",
+			"when": 1777543250771,
+			"tag": "0001_glamorous_firebird",
+			"breakpoints": true
+		},
+		{
+			"idx": 2,
+			"version": "7",
+			"when": 1777570987602,
+			"tag": "0002_abandoned_landau",
+			"breakpoints": true
+		},
+		{
+			"idx": 3,
+			"version": "7",
+			"when": 1778512201164,
+			"tag": "0003_ordinary_scourge",
+			"breakpoints": true
+		},
+		{
+			"idx": 4,
+			"version": "7",
+			"when": 1778561661816,
+			"tag": "0004_curly_otto_octavius",
+			"breakpoints": true
+		},
+		{
+			"idx": 5,
+			"version": "7",
+			"when": 1781661915008,
+			"tag": "0005_abandoned_rocket_racer",
+			"breakpoints": true
+		},
+		{
+			"idx": 6,
+			"version": "7",
+			"when": 1781662973302,
+			"tag": "0006_fair_luke_cage",
+			"breakpoints": true
+		}
+	]
 }

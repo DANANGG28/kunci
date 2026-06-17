@@ -33,15 +33,30 @@ const linkedinUrlSchema = z.preprocess(
 		.optional(),
 )
 
-const captureLeadSchema = z.object({
-	fullName: z.string().min(1, "Name is required"),
-	email: z.string().email("Valid email is required"),
-	companyName: z.string().min(1, "Company name is required"),
-	companyWebsite: z.string().url("Valid website URL is required"),
-	painPoints: z.string().optional(),
-	leadSource: z.string().optional(),
-	linkedinUrl: linkedinUrlSchema,
-})
+const captureLeadSchema = z
+	.object({
+		fullName: z.string().min(1, "Name is required"),
+		email: z.string().email("Valid email is required"),
+		companyName: z.string().min(1, "Company name is required"),
+		companyWebsite: z.string().url("Valid website URL is required").optional(),
+		segment: z
+			.enum(["talent", "agency", "enterprise"])
+			.optional()
+			.default("enterprise"),
+		painPoints: z.string().optional(),
+		leadSource: z.string().optional(),
+		linkedinUrl: linkedinUrlSchema,
+	})
+	.superRefine((data, ctx) => {
+		// Website is required for non-talent segments
+		if (data.segment !== "talent" && !data.companyWebsite) {
+			ctx.addIssue({
+				code: z.ZodIssueCode.custom,
+				message: "Website is required for agency/enterprise leads",
+				path: ["companyWebsite"],
+			})
+		}
+	})
 
 const bulkCaptureLeadSchema = z.object({
 	leads: z

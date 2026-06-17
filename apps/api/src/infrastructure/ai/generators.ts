@@ -32,7 +32,13 @@ export async function generateEmailSequence(
 	const businessContextStr = formatBusinessContextForPrompt(businessCtx)
 
 	const promptLoader = new PromptLoader(settings)
-	const prompt = await promptLoader.getSequenceGeneratorPrompt()
+	const rawPrompt = await promptLoader.getSequenceGeneratorPrompt()
+	const sequenceCount = await settings.get<number>(
+		SETTING_KEYS.PIPELINE_EMAIL_SEQUENCE_COUNT,
+		3,
+	)
+	// Dynamically replace hardcoded "3-email" with the configured count
+	const prompt = rawPrompt.replace(/\b3-email\b/i, `${sequenceCount}-email`)
 	const model = await settings.get<string>(
 		SETTING_KEYS.AI_MODEL_EMAIL_GENERATOR,
 		"openai/gpt-4o-mini",
@@ -59,6 +65,8 @@ Pain Points: ${analysis.painPoints}
 Journey Stage: ${analysis.journeyStage}
 Psychological Triggers: ${analysis.psychologicalTriggers}
 Optimal Approach: ${analysis.optimalApproach}
+
+SEQUENCE_COUNT: Generate exactly ${sequenceCount} emails in the sequence.
 
 CRITICAL: Follow the MARKET CONTEXT rules above strictly when choosing language, tone, greeting, and CTA framing. The lead is more likely to respond if the body matches their cultural and business context.`,
 				},

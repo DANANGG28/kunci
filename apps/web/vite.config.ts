@@ -40,7 +40,9 @@ export default defineConfig(({ mode }) => {
 			// Allow tunnelled hosts (ngrok, cloudflared, etc.) by listing them in
 			// VITE_ALLOWED_HOSTS as a comma-separated string. Falls back to localhost.
 			allowedHosts: env.VITE_ALLOWED_HOSTS
-				? env.VITE_ALLOWED_HOSTS.split(",").map((s) => s.trim()).filter(Boolean)
+				? env.VITE_ALLOWED_HOSTS.split(",")
+						.map((s) => s.trim())
+						.filter(Boolean)
 				: ["localhost", "127.0.0.1"],
 			proxy: {
 				"/rpc": apiTarget,

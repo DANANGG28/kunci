@@ -23,8 +23,8 @@ import {
 	Copy,
 	Download,
 	FileSpreadsheet,
-	type LucideIcon,
 	Loader2,
+	type LucideIcon,
 	Trash2,
 	Upload,
 	Users,
@@ -38,9 +38,9 @@ export const Route = createFileRoute("/_authenticated/bulk-capture")({
 	component: BulkCapturePage,
 })
 
-const CSV_TEMPLATE = `fullName,email,companyName,companyWebsite,painPoints,linkedinUrl
-John Doe,john@acme.com,Acme Corp,https://acme.com,Slow lead response times,https://linkedin.com/in/johndoe
-Jane Smith,jane@globex.com,Globex Corp,https://globex.com,Poor email deliverability,`
+const CSV_TEMPLATE = `fullName,email,companyName,companyWebsite,painPoints,linkedinUrl,leadSource
+John Doe,john@acme.com,Acme Corp,https://acme.com,Slow lead response times,https://linkedin.com/in/johndoe,LinkedIn Campaign
+Jane Smith,jane@globex.com,Globex Corp,https://globex.com,Poor email deliverability,,Website Form`
 
 function softBg(token: string) {
 	return `color-mix(in oklab, ${token} 14%, transparent)`
@@ -160,11 +160,13 @@ function RequirementsPanel({
 							required: false,
 							hint: "Person-level enrichment",
 						},
+						{
+							key: "leadSource",
+							required: false,
+							hint: "Track origin (e.g. LinkedIn, Event)",
+						},
 					].map((c) => (
-						<li
-							key={c.key}
-							className="flex items-start justify-between gap-3"
-						>
+						<li key={c.key} className="flex items-start justify-between gap-3">
 							<div className="flex items-start gap-2 min-w-0">
 								<span
 									className="size-1.5 rounded-full mt-1.5 shrink-0"

@@ -7,11 +7,7 @@
  * stores to retrieve the bytes later.
  */
 export interface FileStorage {
-	put(input: {
-		key: string
-		bytes: Buffer
-		mime: string
-	}): Promise<void>
+	put(input: { key: string; bytes: Buffer; mime: string }): Promise<void>
 
 	get(key: string): Promise<{ bytes: Buffer; mime: string }>
 

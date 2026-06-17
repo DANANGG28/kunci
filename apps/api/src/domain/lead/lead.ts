@@ -3,7 +3,9 @@ export interface Lead {
 	fullName: string
 	email: string
 	companyName: string
-	companyWebsite: string
+	companyWebsite: string | null
+	segment: LeadSegment
+	source: string | null
 	painPoints: string | null
 	leadSource: string | null
 	companyResearch: string | null
@@ -41,6 +43,8 @@ export function isCompletedReason(s: unknown): s is CompletedReason {
 
 export type LeadStage = 0 | 1 | 2 | 3
 
+export type LeadSegment = "talent" | "agency" | "enterprise"
+
 export const REPLY_STATUSES = [
 	"pending",
 	"researching",
@@ -63,7 +67,9 @@ export interface CreateLeadInput {
 	fullName: string
 	email: string
 	companyName: string
-	companyWebsite: string
+	companyWebsite?: string
+	segment?: LeadSegment
+	source?: string
 	painPoints?: string
 	leadSource?: string
 	linkedinUrl?: string

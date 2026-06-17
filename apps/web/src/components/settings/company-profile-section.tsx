@@ -57,7 +57,8 @@ function MimeIcon({ mime }: { mime: string }) {
 			<span
 				className="size-9 rounded-lg flex items-center justify-center"
 				style={{
-					background: "color-mix(in oklab, var(--color-danger) 14%, transparent)",
+					background:
+						"color-mix(in oklab, var(--color-danger) 14%, transparent)",
 					color: "var(--color-danger)",
 				}}
 			>
@@ -205,7 +206,9 @@ export function CompanyProfileSection({ formState, onFieldChange }: Props) {
 						className="size-4"
 						style={{ color: "var(--color-primary)" }}
 					/>
-					<CardTitle className="text-base">Company Profile Attachment</CardTitle>
+					<CardTitle className="text-base">
+						Company Profile Attachment
+					</CardTitle>
 					{mode !== "disabled" && (
 						<Badge tone="info" className="ml-1">
 							{mode === "url" ? "URL link" : "File attachment"}
@@ -249,8 +252,8 @@ export function CompanyProfileSection({ formState, onFieldChange }: Props) {
 							className="text-xs"
 							style={{ color: "var(--color-muted-foreground)" }}
 						>
-							Publicly accessible URL. Will be rendered as a styled call-to-action
-							above the email footer.
+							Publicly accessible URL. Will be rendered as a styled
+							call-to-action above the email footer.
 						</p>
 						<Input
 							type="url"

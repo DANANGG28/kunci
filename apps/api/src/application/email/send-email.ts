@@ -183,9 +183,7 @@ export function makeSendInitialEmailUseCase(deps: EmailUseCaseDeps) {
 			leadId: lead.id,
 			stage: 1,
 			unsubscribeUrl: deps.buildUnsubscribeUrl(lead.email),
-			attachments: profile.attachments.length
-				? profile.attachments
-				: undefined,
+			attachments: profile.attachments.length ? profile.attachments : undefined,
 		})
 
 		// 6. Mark sent + update lead

@@ -33,12 +33,19 @@ export function makeEnrichLeadUseCase(deps: EnrichLeadDeps) {
 		const tldGuess = inferLocaleFromEmail(lead.email)
 
 		let websiteMarkdown = ""
-		try {
-			websiteMarkdown = await deps.scraper.getMarkdown(lead.companyWebsite)
-		} catch (err) {
-			deps.logger.warn(
-				{ leadId: lead.id, url: lead.companyWebsite, err },
-				"Enrichment scrape failed; falling back to TLD-only inference",
+		if (lead.companyWebsite) {
+			try {
+				websiteMarkdown = await deps.scraper.getMarkdown(lead.companyWebsite)
+			} catch (err) {
+				deps.logger.warn(
+					{ leadId: lead.id, url: lead.companyWebsite, err },
+					"Enrichment scrape failed; falling back to TLD-only inference",
+				)
+			}
+		} else {
+			deps.logger.info(
+				{ leadId: lead.id },
+				"No company website; skipping enrichment scrape (talent lead)",
 			)
 		}
 

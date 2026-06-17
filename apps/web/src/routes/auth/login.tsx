@@ -51,7 +51,9 @@ function LoginPage() {
 					rememberMe,
 				})
 				if (error) {
-					setErrorMessage(error.message || "Login failed. Check your credentials.")
+					setErrorMessage(
+						error.message || "Login failed. Check your credentials.",
+					)
 					return
 				}
 				navigate({ to: "/" })
@@ -351,8 +353,7 @@ function BrandMarkIcon() {
 			className="flex h-10 w-10 items-center justify-center rounded-lg border overflow-hidden"
 			style={{
 				borderColor: "var(--color-border)",
-				background:
-					"color-mix(in srgb, var(--color-surface) 70%, transparent)",
+				background: "color-mix(in srgb, var(--color-surface) 70%, transparent)",
 			}}
 		>
 			<img src="/logo.svg" alt="KUNCI" className="h-7 w-7 object-contain" />
@@ -383,7 +384,12 @@ function BrandMark() {
 }
 
 const pipelineSteps = [
-	{ icon: UserPlus, label: "Capture", caption: "Incoming leads", tone: "primary" },
+	{
+		icon: UserPlus,
+		label: "Capture",
+		caption: "Incoming leads",
+		tone: "primary",
+	},
 	{
 		icon: Search,
 		label: "Research",
@@ -410,8 +416,7 @@ function PipelineOverviewCard() {
 			className="rounded-xl border p-4"
 			style={{
 				borderColor: "var(--color-border)",
-				background:
-					"color-mix(in srgb, var(--color-surface) 60%, transparent)",
+				background: "color-mix(in srgb, var(--color-surface) 60%, transparent)",
 			}}
 		>
 			<p
@@ -485,7 +490,11 @@ function StepConnector() {
 }
 
 type Variant = {
-	trailing?: { tone: "success" | "warning" | "info"; dot?: boolean; label: string }
+	trailing?: {
+		tone: "success" | "warning" | "info"
+		dot?: boolean
+		label: string
+	}
 	body: React.ReactNode
 }
 
@@ -813,8 +822,7 @@ function DashboardPreviewCard() {
 			className="rounded-xl border p-3.5 space-y-2.5"
 			style={{
 				borderColor: "var(--color-border)",
-				background:
-					"color-mix(in srgb, var(--color-surface) 60%, transparent)",
+				background: "color-mix(in srgb, var(--color-surface) 60%, transparent)",
 			}}
 		>
 			<style>{`@keyframes kunci-slide-right{from{transform:translateX(-14px);opacity:0}to{transform:translateX(0);opacity:1}}`}</style>

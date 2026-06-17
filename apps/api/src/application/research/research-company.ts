@@ -31,6 +31,9 @@ export function makeResearchCompanyUseCase(deps: ResearchCompanyDeps) {
 
 		try {
 			// Step 1: Scrape website with Deepcrawl
+			if (!lead.companyWebsite) {
+				throw new Error("Cannot research company without a website URL")
+			}
 			deps.logger.info({ url: lead.companyWebsite }, "Scraping company website")
 			const scraped = await deps.scraper.readUrl(lead.companyWebsite)
 

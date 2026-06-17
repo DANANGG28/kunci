@@ -1,6 +1,6 @@
 {
-	"id": "3093c2dd-4017-4e61-bbce-bf75545e43eb",
-	"prevId": "3c55eeb2-e8f1-4317-916a-50f59039537c",
+	"id": "fb46768b-4611-40d1-8638-4be2dd03b62b",
+	"prevId": "6179fadf-e466-4108-97d7-7a0c614f0006",
 	"version": "7",
 	"dialect": "postgresql",
 	"tables": {
@@ -514,6 +514,19 @@
 					"primaryKey": false,
 					"notNull": true
 				},
+				"segment": {
+					"name": "segment",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'enterprise'"
+				},
+				"source": {
+					"name": "source",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"pain_points": {
 					"name": "pain_points",
 					"type": "text",
@@ -584,6 +597,48 @@
 					"primaryKey": false,
 					"notNull": false
 				},
+				"country": {
+					"name": "country",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"locale": {
+					"name": "locale",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"language": {
+					"name": "language",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"timezone": {
+					"name": "timezone",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"company_industry": {
+					"name": "company_industry",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"company_size": {
+					"name": "company_size",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"enriched_at": {
+					"name": "enriched_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": false
+				},
 				"created_at": {
 					"name": "created_at",
 					"type": "timestamp with time zone",
@@ -607,6 +662,57 @@
 					"name": "leads_email_unique",
 					"nullsNotDistinct": false,
 					"columns": ["email"]
+				}
+			},
+			"policies": {},
+			"checkConstraints": {},
+			"isRLSEnabled": false
+		},
+		"public.opt_outs": {
+			"name": "opt_outs",
+			"schema": "",
+			"columns": {
+				"email": {
+					"name": "email",
+					"type": "text",
+					"primaryKey": true,
+					"notNull": true
+				},
+				"token": {
+					"name": "token",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true
+				},
+				"reason": {
+					"name": "reason",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": false
+				},
+				"source": {
+					"name": "source",
+					"type": "text",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "'unsubscribe_link'"
+				},
+				"opted_out_at": {
+					"name": "opted_out_at",
+					"type": "timestamp with time zone",
+					"primaryKey": false,
+					"notNull": true,
+					"default": "now()"
+				}
+			},
+			"indexes": {},
+			"foreignKeys": {},
+			"compositePrimaryKeys": {},
+			"uniqueConstraints": {
+				"opt_outs_token_unique": {
+					"name": "opt_outs_token_unique",
+					"nullsNotDistinct": false,
+					"columns": ["token"]
 				}
 			},
 			"policies": {},

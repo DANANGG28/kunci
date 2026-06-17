@@ -8,3 +8,7 @@ dist/
 .DS_Store
 GEMINI.md
 CLAUDE.md
+.env
+.env.development
+.env.local
+.env.*.local

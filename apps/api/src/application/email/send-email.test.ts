@@ -49,6 +49,7 @@ describe("sendInitialEmail", () => {
 		},
 		emailService: { send: vi.fn() },
 		logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+			settings: { get: vi.fn() },
 		buildUnsubscribeUrl: (email: string) =>
 			`https://example.com/unsubscribe/tok?e=${email}`,
 		config: { senderName: "Sender", senderCompany: "Co" },
@@ -57,6 +58,7 @@ describe("sendInitialEmail", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockDeps.optOutRepo.has.mockResolvedValue(false)
+			mockDeps.settings.get.mockResolvedValue(3)
 	})
 
 	it("generates sequence, sends first email, updates lead (stage 0→1)", async () => {
@@ -133,6 +135,7 @@ describe("sendFollowupEmail", () => {
 		},
 		emailService: { replyInThread: vi.fn() },
 		logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+			settings: { get: vi.fn() },
 		buildUnsubscribeUrl: (email: string) =>
 			`https://example.com/unsubscribe/tok?e=${email}`,
 		config: { senderName: "Sender", senderCompany: "Co" },
@@ -141,6 +144,7 @@ describe("sendFollowupEmail", () => {
 	beforeEach(() => {
 		vi.clearAllMocks()
 		mockDeps.optOutRepo.has.mockResolvedValue(false)
+			mockDeps.settings.get.mockResolvedValue(3)
 	})
 
 	it("sends follow-up for stage 1→2 using thread", async () => {

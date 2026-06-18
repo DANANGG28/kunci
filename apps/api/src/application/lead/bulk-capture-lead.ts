@@ -3,7 +3,7 @@ import type { LeadRepository } from "#/domain/lead/lead-repository.ts"
 import type { OptOutRepository } from "#/domain/opt-out/opt-out-repository.ts"
 import type { EmailVerifier } from "#/domain/ports/email-verifier.ts"
 import type { Logger } from "#/domain/ports/logger.ts"
-import { inferLocaleFromEmail } from "./locale-inference.ts"
+import { enrichLeadInput } from "./enrich-input.ts"
 
 export interface BulkCaptureResult {
 	created: Lead[]
@@ -98,16 +98,8 @@ export function makeBulkCaptureLeadUseCase(deps: BulkCaptureLeadDeps) {
 				continue
 			}
 
-			// 5. Auto-infer locale from email TLD when caller did not supply one
-			const inferred = inferLocaleFromEmail(normalizedEmail)
-			const enriched: CreateLeadInput = {
-				...input,
-				email: normalizedEmail,
-				country: input.country ?? inferred.country ?? undefined,
-				locale: input.locale ?? inferred.locale ?? undefined,
-				language: input.language ?? inferred.language ?? undefined,
-				timezone: input.timezone ?? inferred.timezone ?? undefined,
-			}
+			// 5. Enrich & create lead (SSOT — shared with single capture)
+			const enriched = enrichLeadInput(input)
 
 			// 6. Create lead
 			try {

@@ -4,6 +4,7 @@ import {
 	computeSendDelayMs,
 	loadSendWindowOptions,
 } from "#/application/lead/send-window.ts"
+import { detectSegment } from "#/application/lead/detect-segment.ts"
 import { badRequest } from "#/application/shared/errors.ts"
 import { SETTING_KEYS } from "#/domain/settings/setting-keys.ts"
 import type { ORPCContext } from "#/presentation/orpc/context"
@@ -17,7 +18,9 @@ const ABSOLUTE_BULK_CAPTURE_LIMIT = 1000
 
 function isLinkedInUrl(value: string): boolean {
 	try {
-		const hostname = new URL(value).hostname.toLowerCase()
+		const url = new URL(value)
+		if (url.protocol !== "https:" && url.protocol !== "http:") return false
+		const hostname = url.hostname.toLowerCase()
 		return hostname === "linkedin.com" || hostname.endsWith(".linkedin.com")
 	} catch {
 		return false
@@ -28,31 +31,52 @@ const linkedinUrlSchema = z.preprocess(
 	(value) => (value === "" ? undefined : value),
 	z
 		.string()
+		.max(2048, "URL too long")
 		.url("Valid LinkedIn URL is required")
 		.refine(isLinkedInUrl, "URL must use linkedin.com")
 		.optional(),
 )
 
+const MAX_URL_LENGTH = 2048
+
 const captureLeadSchema = z
 	.object({
-		fullName: z.string().min(1, "Name is required"),
-		email: z.string().email("Valid email is required"),
-		companyName: z.string().min(1, "Company name is required"),
-		companyWebsite: z.string().url("Valid website URL is required").optional(),
+		fullName: z
+			.string()
+			.min(1, "Name is required")
+			.max(200, "Name too long"),
+		email: z.string().email("Valid email is required").max(254, "Email too long"),
+		companyName: z
+			.string()
+			.min(1, "Company name is required")
+			.max(200, "Company name too long"),
+		companyWebsite: z
+			.string()
+			.min(1, "Website URL is required")
+			.max(MAX_URL_LENGTH, "URL too long")
+			.url("Valid website URL is required")
+			.refine(
+				(val) => {
+					const scheme = new URL(val).protocol
+					return scheme === "https:" || scheme === "http:"
+				},
+				"URL must use http or https",
+			),
 		segment: z
 			.enum(["talent", "agency", "enterprise"])
-			.optional()
-			.default("enterprise"),
-		painPoints: z.string().optional(),
-		leadSource: z.string().optional(),
+			.optional(),
+		painPoints: z.string().max(5000, "Pain points too long").optional(),
+		leadSource: z.string().max(200, "Lead source too long").optional(),
 		linkedinUrl: linkedinUrlSchema,
 	})
 	.superRefine((data, ctx) => {
+		const computedSegment = data.segment ?? detectSegment(data)
+
 		// Website is required for non-talent segments
-		if (data.segment !== "talent" && !data.companyWebsite) {
+		if (computedSegment !== "talent" && !data.companyWebsite) {
 			ctx.addIssue({
 				code: z.ZodIssueCode.custom,
-				message: "Website is required for agency/enterprise leads",
+				message: "Website is required for non-talent leads",
 				path: ["companyWebsite"],
 			})
 		}
@@ -149,9 +173,9 @@ export const leadRouter = os.$context<ORPCContext>().router({
 		.input(
 			z.object({
 				page: z.number().int().positive().default(1),
-				limit: z.number().int().positive().default(20),
+				limit: z.number().int().positive().max(100).default(20),
 				stage: z.number().optional(),
-				status: z.string().optional(),
+				status: z.string().max(50).optional(),
 			}),
 		)
 		.output(

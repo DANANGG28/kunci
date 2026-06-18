@@ -1,5 +1,12 @@
 import { and, eq, lte, ne, sql } from "drizzle-orm"
-import type { CreateLeadInput, Lead } from "#/domain/lead/lead.ts"
+import {
+	isCompletedReason,
+	isLeadSegment,
+	isLeadStage,
+	isReplyStatus,
+	type CreateLeadInput,
+	type Lead,
+} from "#/domain/lead/lead.ts"
 import type {
 	LeadRepository,
 	ListLeadsParams,
@@ -243,25 +250,50 @@ export function createLeadRepository(db: Database): LeadRepository {
 }
 
 function mapRowToLead(row: any): Lead {
+	const segment = row.segment
+	if (!isLeadSegment(segment)) {
+		throw new Error(
+			`Invalid segment from DB: "${segment}" for lead ${row.id}`,
+		)
+	}
+	const stage = row.stage
+	if (!isLeadStage(stage)) {
+		throw new Error(
+			`Invalid stage from DB: "${stage}" for lead ${row.id}`,
+		)
+	}
+	const replyStatus = row.replyStatus
+	if (!isReplyStatus(replyStatus)) {
+		throw new Error(
+			`Invalid replyStatus from DB: "${replyStatus}" for lead ${row.id}`,
+		)
+	}
+	const completedReason = row.completedReason ?? null
+	if (completedReason !== null && !isCompletedReason(completedReason)) {
+		throw new Error(
+			`Invalid completedReason from DB: "${completedReason}" for lead ${row.id}`,
+		)
+	}
+
 	return {
 		id: row.id,
 		fullName: row.fullName,
 		email: row.email,
 		companyName: row.companyName,
 		companyWebsite: row.companyWebsite ?? null,
-		segment: row.segment as Lead["segment"],
+		segment,
 		source: row.source ?? null,
 		painPoints: row.painPoints,
 		leadSource: row.leadSource,
 		companyResearch: row.companyResearch,
-		stage: row.stage as Lead["stage"],
-		replyStatus: row.replyStatus as Lead["replyStatus"],
+		stage,
+		replyStatus,
 		latestMessageId: row.latestMessageId,
 		linkedinUrl: row.linkedinUrl,
 		messageIds: row.messageIds ?? [],
 		lastEmailSentAt: row.lastEmailSentAt,
 		autoReplyTurns: row.autoReplyTurns ?? 0,
-		completedReason: (row.completedReason ?? null) as Lead["completedReason"],
+		completedReason,
 		country: row.country ?? null,
 		locale: row.locale ?? null,
 		language: row.language ?? null,

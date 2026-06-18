@@ -23,6 +23,10 @@ import {
 } from "./company-profile-cta.ts"
 import { appendFooterToHtml, buildFooterHtml } from "./email-footer.ts"
 
+async function getEmailSequenceCount(settings: SettingsService): Promise<number> {
+	return settings.get<number>(SETTING_KEYS.PIPELINE_EMAIL_SEQUENCE_COUNT, 3)
+}
+
 export interface SendEmailConfig {
 	senderName: string
 	senderCompany: string
@@ -125,21 +129,31 @@ export function makeSendInitialEmailUseCase(deps: EmailUseCaseDeps) {
 			return
 		}
 
-		// 1. Generate 3-email sequence
+		const emailCount = await getEmailSequenceCount(deps.settings)
+
+		// 1. Generate email sequence
 		deps.logger.info({ leadId: lead.id }, "Generating email sequence")
 		const generated = await deps.ai.generateEmailSequence(lead, analysis)
 
 		// 2. Save sequences to DB
 		const sequences = await deps.sequenceRepo.saveAll(
 			lead.id,
-			generated.emails.map((e) => ({
-				leadId: lead.id,
-				emailNumber: e.emailNumber as 1 | 2 | 3,
-				subjectLines: e.subjectLines,
-				content: e.content,
-				cta: e.callToAction,
-				psychologicalTrigger: e.psychologicalTrigger,
-			})),
+			generated.emails.map((e) => {
+				if (e.emailNumber < 1 || e.emailNumber > emailCount) {
+					throw new AppError(
+						"INTERNAL_ERROR",
+						`AI returned emailNumber=${e.emailNumber} outside configured range 1..${emailCount}`,
+					)
+				}
+				return {
+					leadId: lead.id,
+					emailNumber: e.emailNumber,
+					subjectLines: e.subjectLines,
+					content: e.content,
+					cta: e.callToAction,
+					psychologicalTrigger: e.psychologicalTrigger,
+				}
+			}),
 		)
 
 		const firstEmail = sequences.find((s) => s.emailNumber === 1)
@@ -203,7 +217,7 @@ export function makeSendInitialEmailUseCase(deps: EmailUseCaseDeps) {
 	}
 }
 
-/** Send a follow-up email (stage 1→2 or 2→3) */
+/** Send a follow-up email (stage 1→2 or 2→N) */
 export function makeSendFollowupUseCase(deps: EmailUseCaseDeps) {
 	return async (lead: Lead): Promise<void> => {
 		if (await deps.optOutRepo.has(lead.email)) {
@@ -218,18 +232,19 @@ export function makeSendFollowupUseCase(deps: EmailUseCaseDeps) {
 			return
 		}
 
-		const nextStage = (lead.stage + 1) as 1 | 2 | 3
-		if (nextStage > 3) {
+		const emailCount = await getEmailSequenceCount(deps.settings)
+		const nextStage = lead.stage + 1
+		if (nextStage > emailCount) {
 			deps.logger.info(
 				{ leadId: lead.id },
-				"All 3 emails sent, marking completed",
+				`All ${emailCount} emails sent, marking completed`,
 			)
 			await deps.leadRepo.update(lead.id, { replyStatus: "completed" })
 			return
 		}
 
 		// 1. Get email template for next stage
-		const template = await deps.sequenceRepo.getByStage(lead.id, nextStage)
+		const template = await deps.sequenceRepo.getByStage(lead.id, nextStage as 1 | 2 | 3)
 		if (!template) {
 			deps.logger.warn(
 				{ leadId: lead.id, nextStage },
@@ -272,21 +287,21 @@ export function makeSendFollowupUseCase(deps: EmailUseCaseDeps) {
 			originalMessageId: lead.latestMessageId,
 			previousRefs: lead.messageIds,
 			leadId: lead.id,
-			stage: nextStage,
+			stage: nextStage as 0 | 1 | 2 | 3,
 			unsubscribeUrl: deps.buildUnsubscribeUrl(lead.email),
 		})
 
 		// 5. Update lead
 		await deps.sequenceRepo.markSent(template.id)
 		await deps.leadRepo.update(lead.id, {
-			stage: nextStage,
+			stage: nextStage as 0 | 1 | 2 | 3,
 			latestMessageId: result.messageId,
 			messageIds: [...lead.messageIds, result.messageId],
 			lastEmailSentAt: result.sentAt,
 		})
 
 		deps.logger.info(
-			{ leadId: lead.id, stage: nextStage, messageId: result.messageId },
+			{ leadId: lead.id, stage: nextStage as 0 | 1 | 2 | 3, messageId: result.messageId },
 			"Follow-up email sent",
 		)
 	}

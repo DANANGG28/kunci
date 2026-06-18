@@ -8,6 +8,7 @@ export interface BulkLeadRow {
 	email: string
 	companyName: string
 	companyWebsite: string
+	segment?: string
 	painPoints?: string
 	leadSource?: string
 	linkedinUrl?: string
@@ -53,6 +54,7 @@ export function parseCSV(csvText: string): {
 		companywebsite: "companyWebsite",
 		company_website: "companyWebsite",
 		website: "companyWebsite",
+		segment: "segment",
 		painpoints: "painPoints",
 		pain_points: "painPoints",
 		leadsource: "leadSource",
@@ -115,6 +117,7 @@ export function parseCSV(csvText: string): {
 			email: row.email,
 			companyName: row.companyName,
 			companyWebsite: website,
+			segment: row.segment || undefined,
 			painPoints: row.painPoints || undefined,
 			leadSource: row.leadSource || "Bulk Import",
 			linkedinUrl: row.linkedinUrl || undefined,

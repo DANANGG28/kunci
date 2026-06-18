@@ -38,9 +38,9 @@ export const Route = createFileRoute("/_authenticated/bulk-capture")({
 	component: BulkCapturePage,
 })
 
-const CSV_TEMPLATE = `fullName,email,companyName,companyWebsite,painPoints,linkedinUrl,leadSource
-John Doe,john@acme.com,Acme Corp,https://acme.com,Slow lead response times,https://linkedin.com/in/johndoe,LinkedIn Campaign
-Jane Smith,jane@globex.com,Globex Corp,https://globex.com,Poor email deliverability,,Website Form`
+const CSV_TEMPLATE = `fullName,email,companyName,companyWebsite,segment,painPoints,linkedinUrl,leadSource
+John Doe,john@acme.com,Acme Corp,https://acme.com,enterprise,Slow lead response times,https://linkedin.com/in/johndoe,LinkedIn Campaign
+Jane Smith,jane@globex.com,Globex Corp,https://globex.com,agency,Poor email deliverability,,Website Form`
 
 function softBg(token: string) {
 	return `color-mix(in oklab, ${token} 14%, transparent)`
@@ -154,6 +154,7 @@ function RequirementsPanel({
 							required: true,
 							hint: "Scraped for AI research",
 						},
+						{ key: "segment", required: false, hint: "talent / agency / enterprise" },
 						{ key: "painPoints", required: false, hint: "Sharpens AI copy" },
 						{
 							key: "linkedinUrl",

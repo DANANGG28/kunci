@@ -32,13 +32,11 @@ export async function generateEmailSequence(
 	const businessContextStr = formatBusinessContextForPrompt(businessCtx)
 
 	const promptLoader = new PromptLoader(settings)
-	const rawPrompt = await promptLoader.getSequenceGeneratorPrompt()
+	const prompt = await promptLoader.getSequenceGeneratorPrompt()
 	const sequenceCount = await settings.get<number>(
 		SETTING_KEYS.PIPELINE_EMAIL_SEQUENCE_COUNT,
 		3,
 	)
-	// Dynamically replace hardcoded "3-email" with the configured count
-	const prompt = rawPrompt.replace(/\b3-email\b/i, `${sequenceCount}-email`)
 	const model = await settings.get<string>(
 		SETTING_KEYS.AI_MODEL_EMAIL_GENERATOR,
 		"openai/gpt-4o-mini",

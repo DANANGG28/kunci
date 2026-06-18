@@ -19,6 +19,7 @@ export const captureFieldSchemas = {
 	email: z.string().email("Valid email is required"),
 	companyName: z.string().min(1, "Company name is required"),
 	companyWebsite: z.string().url("Valid website URL is required"),
+	segment: z.enum(["talent", "agency", "enterprise"]).optional(),
 	painPoints: z.string().optional(),
 	linkedinUrl: z
 		.string()
@@ -33,6 +34,7 @@ export type CaptureFormValues = {
 	email: string
 	companyName: string
 	companyWebsite: string
+	segment?: "" | "talent" | "agency" | "enterprise"
 	painPoints?: string
 	linkedinUrl?: string
 }
@@ -53,12 +55,14 @@ export function useCaptureLogic() {
 			email: "",
 			companyName: "",
 			companyWebsite: "",
+			segment: "" as "",
 			painPoints: "",
 			linkedinUrl: "",
 		} as CaptureFormValues,
 		onSubmit: async ({ value }) => {
 			await captureLead({
 				...value,
+				segment: value.segment || undefined,
 				linkedinUrl: value.linkedinUrl?.trim() || undefined,
 				leadSource: "Manual Entry",
 			} as any)

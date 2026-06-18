@@ -1,3 +1,4 @@
+import { badRequest } from "#/application/shared/errors.ts"
 import type { Lead } from "#/domain/lead/lead.ts"
 import type { LeadRepository } from "#/domain/lead/lead-repository.ts"
 import type { AIService, WebsiteAnalysis } from "#/domain/ports/ai-service.ts"
@@ -32,13 +33,13 @@ export function makeResearchCompanyUseCase(deps: ResearchCompanyDeps) {
 		try {
 			// Step 1: Scrape website with Deepcrawl
 			if (!lead.companyWebsite) {
-				throw new Error("Cannot research company without a website URL")
+				throw badRequest("Cannot research company without a website URL")
 			}
 			deps.logger.info({ url: lead.companyWebsite }, "Scraping company website")
 			const scraped = await deps.scraper.readUrl(lead.companyWebsite)
 
 			if (!scraped.success || !scraped.markdown) {
-				throw new Error(`Failed to scrape website: ${lead.companyWebsite}`)
+				throw badRequest(`Failed to scrape website: ${lead.companyWebsite}`)
 			}
 
 			// Step 2: AI analyze website content (P3)

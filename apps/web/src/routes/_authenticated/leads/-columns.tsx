@@ -14,6 +14,7 @@ export type Lead = {
 	email: string
 	companyName: string
 	companyWebsite: string
+	segment?: string | null
 	leadSource?: string | null
 	stage: number
 	replyStatus: string
@@ -53,6 +54,12 @@ export const statusLabels: Record<string, string> = {
 	completed: "Completed",
 	bounced: "Bounced",
 	research_failed: "Research failed",
+}
+
+const segmentTones: Record<string, "neutral" | "primary" | "accent" | "info"> = {
+	talent: "primary",
+	agency: "accent",
+	enterprise: "info",
 }
 
 const dateFormatter = new Intl.DateTimeFormat("en", {
@@ -145,6 +152,29 @@ export const columns: ColumnDef<Lead>[] = [
 			return (
 				<Badge tone="outline" className="font-normal">
 					{source}
+				</Badge>
+			)
+		},
+	},
+	{
+		accessorKey: "segment",
+		header: ({ column }) => (
+			<DataTableColumnHeader column={column} title="Segment" />
+		),
+		cell: ({ row }) => {
+			const segment = row.original.segment
+			if (!segment)
+				return (
+					<span
+						className="text-xs"
+						style={{ color: "var(--color-muted-foreground)" }}
+					>
+						—
+					</span>
+				)
+			return (
+				<Badge tone={segmentTones[segment] ?? "neutral"} className="capitalize">
+					{segment}
 				</Badge>
 			)
 		},

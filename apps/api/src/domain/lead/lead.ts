@@ -1,3 +1,50 @@
+export const LEAD_SEGMENTS = ["talent", "agency", "enterprise"] as const
+
+export type LeadSegment = (typeof LEAD_SEGMENTS)[number]
+
+export function isLeadSegment(s: unknown): s is LeadSegment {
+	return LEAD_SEGMENTS.includes(s as LeadSegment)
+}
+
+export const LEAD_STAGES = [0, 1, 2, 3] as const
+
+export type LeadStage = (typeof LEAD_STAGES)[number]
+
+export function isLeadStage(n: unknown): n is LeadStage {
+	return typeof n === "number" && LEAD_STAGES.includes(n as LeadStage)
+}
+
+export const REPLY_STATUSES = [
+	"pending",
+	"researching",
+	"research_failed",
+	"ready",
+	"awaiting",
+	"replied",
+	"bounced",
+	"completed",
+	"opted_out",
+] as const
+
+export type ReplyStatus = (typeof REPLY_STATUSES)[number]
+
+export function isReplyStatus(s: unknown): s is ReplyStatus {
+	return REPLY_STATUSES.includes(s as ReplyStatus)
+}
+
+export const COMPLETED_REASONS = [
+	"won",
+	"opted_out",
+	"not_interested",
+	"cap_reached",
+] as const
+
+export type CompletedReason = (typeof COMPLETED_REASONS)[number]
+
+export function isCompletedReason(s: unknown): s is CompletedReason {
+	return COMPLETED_REASONS.includes(s as CompletedReason)
+}
+
 export interface Lead {
 	id: string
 	fullName: string
@@ -26,41 +73,6 @@ export interface Lead {
 	enrichedAt: Date | null
 	createdAt: Date
 	updatedAt: Date
-}
-
-export const COMPLETED_REASONS = [
-	"won",
-	"opted_out",
-	"not_interested",
-	"cap_reached",
-] as const
-
-export type CompletedReason = (typeof COMPLETED_REASONS)[number]
-
-export function isCompletedReason(s: unknown): s is CompletedReason {
-	return COMPLETED_REASONS.includes(s as CompletedReason)
-}
-
-export type LeadStage = 0 | 1 | 2 | 3
-
-export type LeadSegment = "talent" | "agency" | "enterprise"
-
-export const REPLY_STATUSES = [
-	"pending",
-	"researching",
-	"research_failed",
-	"ready",
-	"awaiting",
-	"replied",
-	"bounced",
-	"completed",
-	"opted_out",
-] as const
-
-export type ReplyStatus = (typeof REPLY_STATUSES)[number]
-
-export function isReplyStatus(s: unknown): s is ReplyStatus {
-	return REPLY_STATUSES.includes(s as ReplyStatus)
 }
 
 export interface CreateLeadInput {

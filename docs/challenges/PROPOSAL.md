@@ -1,303 +1,324 @@
 # PROPOSAL: PERFECT10 Internship Challenge Implementations
 
 ## 1. Ringkasan Eksekutif
-Dalam rangka menjawab tantangan internship PERFECT10, proposal ini menguraikan solusi arsitektural dan implementasi teknis untuk menyelesaikan masalah kritis pada *outbound pipeline* yang ada saat ini. 
 
-Platform PERFECT10 memiliki potensi luar biasa sebagai mesin akuisisi klien. Namun, kelemahan pada segmentasi (*lead segmentation*) dan ketergantungan mutlak pada *company website* membuat banyak potensi lead potensial—khususnya dari segmen *Talent* atau profesional independen—terbuang begitu saja. Solusi yang telah kami bangun dan selesaikan pada Fase 1 dan Fase 2 bertujuan untuk merombak pipeline agar lebih dinamis, cerdas secara kontekstual, dan inklusif terhadap seluruh jenis audiens.
+Platform KUNCI adalah mesin *cold outreach* B2B berbasis pipeline yang sudah berjalan di atas arsitektur production-grade: multi-stage pipeline dengan BullMQ, auto-reply chat berbasis AI intent classification, follow-up scheduling, dan container hardening. Proposal ini menguraikan **penyempurnaan dan penambahan** di atas fondasi yang sudah ada — bukan penggantian business logic — berdasarkan tantangan internship PERFECT10.
 
-## 2. Arsitektur & Solusi Teknis
-Untuk menutupi *gap* arsitektur yang teridentifikasi, beberapa perubahan fundamental telah diimplementasikan dengan berpegang pada pola **Clean Architecture**:
+Fokus implementasi: segmentasi lead end-to-end, validasi input sesuai OWASP, eliminasi magic string, runtime type safety di repository boundary, dan persiapan fondasi multi-tenant untuk production scale.
 
-- **Dynamic Lead Segmentation:** Menambahkan dukungan *native* di tingkat Domain dan Database untuk 3 segmen: `enterprise`, `agency`, dan `talent`. Segmentasi ini dideteksi secara otomatis (`detectSegment()`) melalui analisis domain email (misalnya Gmail/Yahoo → talent) maupun ketiadaan website.
-- **Talent-Segment Support (Website-less Flow):** Menghapus konstrain *mandatory website* di PostgreSQL dan logic `superRefine` Zod pada API Router. 
-- **Synthetic Context Builder:** Alih-alih melakukan *dummy scraping* yang rawan *error*, kami membangun `buildTalentResearchContext()`. Layanan ini men-sintesis data metadata lead menjadi format *CompanyResearchResult* standar, sehingga AI Analyzer dan Sequence Generator (Prompt P1 & P2) tetap dapat bekerja secara mulus tanpa perubahan di OpenRouter AI service.
+## 2. Arsitektur Existing
 
-## VISION: Dua Minggu Tambahan
+### 2.1 Pipeline Outbound (Cold Outreach)
 
-### "Bila memiliki dua minggu tambahan, saya akan mengubah KUNCI menjadi mesin nurture inbound multi-segmen dengan cara berikut:"
+Pipeline utama berjalan di `run-outbound-pipeline.ts` dengan 7 tahapan yang di-track per langkah:
 
-#### Apa yang Dibangun (Week 1-2)
+| Tahap | ID | Model AI | Layanan Eksternal |
+|-------|-----|----------|-------------------|
+| Capture | `capture` | — | PostgreSQL |
+| Enrichment | `enrich` | `openai/o3-mini` | Deepcrawl + OpenRouter |
+| Scrape Website | `scrape` | — | Deepcrawl |
+| Analisis Website | `analyze_website` | `openai/o3-mini` | OpenRouter |
+| Company Profile | `build_profile` | `openai/gpt-4.1-mini` | OpenRouter |
+| Analisis Perilaku | `analyze_behavior` | `openai/gpt-4o` | OpenRouter |
+| Kirim Email | `send_email` | `openai/gpt-4o-mini` | OpenRouter + Resend |
 
-**Week 1: Warm Inbound Email Customization**
-- Modify P2 prompt (SEQUENCE_GENERATOR_PROMPT) dari cold tone → warm inbound tone
-- Segment-specific CTAs:
-  - Talent: "Join our talent community & explore opportunities"
-  - Agency: "Let's explore strategic partnership for mutual growth"
-  - Enterprise: "Let's schedule a consultation to discuss your growth"
-- Inject segment awareness ke P2: pass lead.segment ke prompt
-- Update generators.ts untuk conditional prompt injection
-- A/B test dengan mock data
+**Dual-path execution berdasarkan segmen:**
+- **Talent**: Melewati enrichment dan scraping. Konteks dibangun dari metadata lead (`buildTalentResearchContext`), tidak perlu company website.
+- **Enterprise / Agency**: Full enrichment → scraping → multi-step AI analysis → generate sequence → kirim email pertama.
 
-**Week 2: Production Readiness & Analytics**
-- End-to-end testing: BullMQ pipeline + Resend email sending
-- Dashboard: Segment performance tracking (reply rate, bounce rate, conversion)
-- Monitoring: Alert jika segment-specific metrics drop
-- Documentation: Handoff ke PERFECT10 team
+Error handling per-tahap dengan *graceful degradation*: kegagalan enrichment non-fatal (pipeline lanjut), kegagalan scraping/behavior/send bersifat fatal (lead ditandai `research_failed`, Slack notifikasi dikirim).
 
-#### Apa yang Dipangkas (& Alasannya)
+### 2.2 Deteksi Segmen Otomatis
 
-| Feature | Status | Alasan |
-|---------|--------|--------|
-| Multi-tenant workspace | ❌ DIPANGKAS | MVP fokus single-tenant dulu; scaling fase berikutnya |
-| Advanced AI analytics (LLM-based insights) | ❌ DIPANGKAS | Complex, high cost; basic metrics sufficient untuk MVP |
-| Bulk import optimization | ❌ DIPANGKAS | CSV existing works; optimize later saat volume besar |
-| LinkedIn API integration | ❌ DIPANGKAS | Best-effort approach (metadata) sufficient; paid API costly |
-| Custom segment creation UI | ❌ DIPANGKAS | Hard-coded 3 segments (talent/agency/enterprise) sufficient |
-| WhatsApp/SMS outreach | ❌ DIPANGKAS | Email-first; multicanal fase selanjutnya |
+`detectSegment()` di `detect-segment.ts` — rule-based classifier deterministik:
 
-**Rationale**: Fokus pada core value (3 segmen, warm inbound) dengan minimal scope, maksimal impact.
+1. **Talent**: Domain email gratis (gmail, yahoo, hotmail) **atau** tidak ada company website
+2. **Agency**: Domain recruitment platform (greenhouse.io, lever.co, workable.com, dll — 13 domain) **atau** kata kunci agency di `leadSource`
+3. **Enterprise**: Email korporat + website tersedia (default fallback)
 
-#### Metrik Kesuksesan (End of Week 2)
+### 2.3 Infrastruktur Production
 
-| KPI | Target | How Measured |
-|-----|--------|---|
-| Email Relevance Score | +40% vs generic | Manual A/B review (10 samples per segment) |
-| Segment-aware CTR | Talent: 8%, Agency: 12%, Enterprise: 15% | Track via Resend dashboard link clicks |
-| Pipeline Completion | 99% untuk talent, 98% untuk enterprise | Track pipeline_steps table completion |
-| Type Safety | 0 runtime errors | TypeScript strict + integration tests |
-| Deployment Readiness | 100% | Code review ✅, Performance test ✅, Security scan ✅ |
+| Komponen | Teknologi | Status |
+|----------|-----------|--------|
+| Runtime | Node.js 22 Alpine, ESM | Production |
+| HTTP Framework | Hono + oRPC | Production |
+| Database | PostgreSQL 17, Drizzle ORM | Production |
+| Queue | BullMQ + Redis 7 | Production |
+| AI | OpenRouter (GPT-4o/o3-mini) | Production |
+| Email | Resend API + Webhook | Production |
+| Scraping | Deepcrawl | Production |
+| Auth | Better Auth (session-based) | Production |
+| Container | Multi-stage Docker, read-only FS, non-root user, dropped capabilities | Production |
+| Observability | Pino structured logging, PipelineTracker, Slack notifikasi | Production |
 
-#### Satu Risiko: UU PDP (Data Privacy Law)
+### 2.4 Yang Sudah Production-Grade
 
-**Risk Identifikasi:**
-Sistem sekarang melakukan behavioral profiling (analyze email domain, infer job title, detect pain points) untuk personalisasi email. Ini bisa melanggar UU PDP pasal 1(1) tentang "penyalahgunaan data pribadi" jika:
-- Lead TIDAK memberikan explicit consent untuk profiling
-- Privacy policy TIDAK mendisclose behavioral triggers
-- Unsubscribe mechanism tidak berfungsi per-segment
+- **Graceful shutdown**: SIGINT/SIGTERM handler, drain BullMQ worker, tutup HTTP server
+- **Health check**: `/healthz` (liveness) + `/ready` (readiness, cek Redis ping)
+- **Environment validation**: Zod schema validasi semua env vars saat startup
+- **Retry queue**: 3 attempt, exponential backoff 30s, rate limiting (default 10/detik)
+- **Auto-reply chat**: Intent classification (6 intent), turn cap (max 6), jittered delay (3-15 menit), re-verifikasi sebelum kirim
+- **ASEAN locale inference**: 10 negara, deterministik, offline, TLD-based
+- **Email threading**: `messageId` / `inReplyTo` / `previousRefs` tracking
+- **Opt-out lifecycle**: Token-based unsubscribe, opt-out registry, reply-based detection
+- **Settings service**: 50+ config key untuk model AI, prompt, temperature, pipeline tuning, email styling — dapat diubah tanpa deploy
 
-**Mitigasi:**
-1. ✅ Add "Consent" checkbox di lead capture form:
-   - "I agree to receive personalized emails based on my profile and interests"
-   - Log consent di database (consent_date, consent_source)
+## 3. Implementasi Tambahan
 
-2. ✅ Update Privacy Policy dengan disclosure:
-   - "We use behavioral profiling to personalize email content"
-   - "Profiling is based on: email domain, job title, pain points provided"
-   - "You can opt-out per-segment at any time"
+Berikut adalah penyempurnaan yang diimplementasikan **di atas fondasi existing**, tanpa mengubah business logic pipeline yang sudah berjalan.
 
-3. ✅ Verify Unsubscribe:
-   - Every email has: `List-Unsubscribe: <https://kunci.ai/unsubscribe/{leadId}>`
-   - One-click unsubscribe works immediately (tested)
-   - Add to opt_outs table
+### 3.1 Segmentasi Lead End-to-End
 
-4. ✅ Regular audit:
-   - Monthly: Check opt-out rate per segment
-   - Alert if opt-out > 5% (potential UU PDP issue)
-   - Document: compliance checklist
+**Masalah**: `LeadSegment` sudah didefinisikan (`"talent" | "agency" | "enterprise"`) tapi tidak muncul di frontend, tidak bisa diset oleh client, dan logika deteksi `agency` tidak ada.
 
----
+**Solusi**:
 
-## 6. AI USAGE & TRANSPARENCY
+| Layer | File | Perubahan |
+|-------|------|-----------|
+| Domain | `detect-segment.ts` | Tambah deteksi agency: 13 domain recruitment + kata kunci `leadSource` |
+| Application | `enrich-input.ts` | Fungsi baru: SSOT enrichment — `input.segment ?? detectSegment(input)` |
+| Application | `capture-lead.ts` | Pakai `enrichLeadInput` sebagai pengganti inline enrichment |
+| Application | `bulk-capture-lead.ts` | Pakai `enrichLeadInput` yang sama (DRY) |
+| Presentation | `routers/lead.ts` | `superRefine`: validasi pakai `data.segment ?? detectSegment(data)` |
+| Frontend | `leads/-columns.tsx` | Kolom Segment dengan color-coded Badge |
+| Frontend | `-use-capture.ts` | Field segment di capture form |
+| Frontend | `-use-bulk-capture.ts` | Field segment di CSV header mapping |
 
-### Kebijakan Penggunaan AI
-Sesuai requirement internship:
-- ✅ AI (Claude, Cursor, Copilot, Gemini) **diperbolehkan dan dianjurkan**
-- ✅ Wajib **memahami & menjelaskan setiap baris**
-- ✅ **Candid** tentang bagian mana yang dibantu AI dan cara verifikasi
+**Prinsip**: Client set segment sebagai hint, server compute sebagai fallback. SSOT di `enrichLeadInput`.
 
-### Breakdown Per Component
+### 3.2 Validasi Input OWASP
 
-#### Challenge 1: Lead Segmentation
+**Masalah**: Router Zod schema tidak membatasi panjang string, tidak memvalidasi URL scheme.
 
-**1. LeadSegment Type Definition**
+**Solusi** di `routers/lead.ts`:
+
+| Field | Batasan | Aturan Tambahan |
+|-------|---------|-----------------|
+| `fullName` | `.max(200)` | — |
+| `email` | `.max(254)` | Format email |
+| `companyName` | `.max(200)` | — |
+| `companyWebsite` | `.max(2048)` | Allowlist scheme: http/https only |
+| `painPoints` | `.max(5000)` | — |
+| `leadSource` | `.max(200)` | — |
+| `linkedinUrl` | `.max(2048)` | Allowlist scheme: http/https only |
+| List `limit` | `.max(100)` | — |
+| List `status` | `.max(50)` | — |
+
+### 3.3 Runtime Type Guards (Repository Boundary)
+
+**Masalah**: `mapRowToLead()` di `lead-repository.ts` menggunakan blind type assertion `as` tanpa validasi runtime. Database row adalah external boundary — data corrupt bisa lolos ke domain.
+
+**Sebelum**:
 ```typescript
-export type LeadSegment = 'talent' | 'agency' | 'enterprise'
+segment: row.segment as Lead["segment"],
+stage: row.stage as Lead["stage"],
+replyStatus: row.replyStatus as Lead["replyStatus"],
+completedReason: (row.completedReason ?? null) as Lead["completedReason"],
 ```
-- **AI Generated**: 100% (simple union type)
-- **How I Verified**: 
-  - Checked domain requirements dari teardown.md (3 segments)
-  - Ran TypeScript compiler (strict mode) — pass ✅
-  - No edge cases needed (enum exhaustiveness check)
 
-**2. detectSegment() Function**
+**Sesudah**: Validasi dengan type guard + throw Error jika invalid:
 ```typescript
-export function detectSegment(input: CreateLeadInput): LeadSegment {
-  const emailDomain = input.email.split('@')[1]?.toLowerCase()
-  if (['gmail.com', 'yahoo.com', 'hotmail.com'].includes(emailDomain ?? '')) {
-    return 'talent'
-  }
-  if (!input.companyWebsite || input.companyWebsite.trim() === '') {
-    return 'talent'
-  }
-  return 'enterprise'
-}
+if (!isLeadSegment(segment)) throw new Error(...)
+if (!isLeadStage(stage)) throw new Error(...)
+if (!isReplyStatus(replyStatus)) throw new Error(...)
+if (completedReason !== null && !isCompletedReason(completedReason)) throw new Error(...)
 ```
-- **AI Generated**: 70% (Claude suggest logic)
-- **Manual Refinement**: 30%
-  - Saya decide: personal email domains mana saja → added gmail, yahoo, hotmail
-  - Saya add: `.trim()` check supaya whitespace tidak jadi bug
-  - Saya verify: tested 3 scenarios (Gmail → talent, company.com → enterprise, no website → talent)
-- **How I Verified**:
-  - Manual trace: console.log test dengan berbagai input
-  - TypeScript: strict null checking (emailDomain ?? '')
-  - Logic review: memastikan flow sesuai business rule
 
-**3. Schema Update (companyWebsite nullable)**
-- **AI Generated**: 80% (Drizzle syntax suggest)
-- **Manual Refinement**: 20%
-  - Saya decide: kapan .notNull() vs .optional()
-  - Saya verify: check Drizzle docs untuk correct PostgreSQL constraint
-- **How I Verified**:
-  - TypeScript compilation
-  - Database migration applied successfully
-  - Drizzle Studio: Lihat column type berubah
+Type guard `isReplyStatus` dan `isCompletedReason` sudah ada. `isLeadSegment` dan `isLeadStage` ditambahkan dengan refactor `const` array (pola yang sama).
 
-#### Challenge 2 Track B: Talent Support
+### 3.4 Eliminasi Magic String
 
-**1. talent-context-builder.ts**
-```typescript
-export function buildTalentResearchContext(lead: Lead): CompanyResearchResult {
-  const profileParts: string[] = [
-    '=== Talent Lead Profile ===',
-    `Name: ${lead.fullName}`,
-    `Email: ${lead.email}`,
-    // ... more fields
-  ]
-  return {
-    companyProfile: profileParts.join('\n'),
-    websiteAnalysis: {
-      brandName: lead.companyName || 'Individual',
-      // ... synthetic WebsiteAnalysis object
-    },
-  }
-}
-```
-- **AI Generated**: 60% (structure, loop suggest)
-- **Manual Refinement**: 40%
-  - Problem: Claude first generate WebsiteAnalysis yang tidak match interface type
-  - Solution: Saya baca WebsiteAnalysis interface → ubah field names
-  - Saya add: fallback values jika lead data incomplete
-  - Saya test: pastikan return type = CompanyResearchResult yang expected
-- **How I Verified**:
-  - Read actual WebsiteAnalysis type definition
-  - TypeScript strict check — zero error
-  - Trace type flow: builder → P1 analyzer → P2 prompt
-  - Manual: Insert talent lead, check companyProfile string format valid
+**Masalah**: `generators.ts:41` — `rawPrompt.replace(/\b3-email\b/i, ...)` fragile string replacement. `send-email.ts` — hardcoded `as 1 | 2 | 3` dan `nextStage > 3` (asumsi sequence selalu 3 email), padahal `SETTING_KEYS.PIPELINE_EMAIL_SEQUENCE_COUNT` sudah ada.
 
-**2. Pipeline Branching Logic**
-```typescript
-if (lead.segment === 'talent') {
-  const talentContext = await buildTalentResearchContext(lead)
-  companyProfile = talentContext.companyProfile
-} else {
-  const research = await researchCompany(lead)
-  companyProfile = research.companyProfile
-}
-```
-- **AI Generated**: 50% (conditional suggest)
-- **Manual Refinement**: 50%
-  - Saya decide: where to place branching (sebelum atau sesudah enrichLead?)
-  - Saya trace: existing flow dalam orchestrator
-  - Saya add: guards di scraper functions jika website falsy
-  - Saya verify: non-talent flow still works normally
-- **How I Verified**:
-  - Trace source code: run-outbound-pipeline.ts existing flow
-  - TypeScript: check type compatibility (talentContext vs research both return CompanyProfile)
-  - Logic review: semua code paths covered
+**Solusi**:
+- Prompt template (`prompts/index.ts`): hapus `"3-email"` dari `SEQUENCE_GENERATOR_PROMPT`. Sequence count di-inject via user message `SEQUENCE_COUNT: Generate exactly ${sequenceCount} emails`.
+- `generators.ts`: hapus `.replace(/\b3-email\b/i, ...)` — tidak diperlukan lagi.
+- `send-email.ts`: helper `getEmailSequenceCount(settings)` — baca dari settings, default 3. Runtime validation `emailNumber` di range `1..count` dengan `throw AppError(...)` jika out of range. `nextStage > emailCount` bukan hardcoded `> 3`.
 
-#### Challenge 3: Proposal Document
+### 3.5 Frontend Improvements
 
-**Proposal Content**
-- **AI Generated**: 40% (structure template, metric suggestions)
-- **Manual Refinement**: 60%
-  - Saya write: ringkasan eksekutif (paham bisnis PERFECT10)
-  - Saya calculate: metrik realistis berdasarkan implementation
-  - Saya identify: risiko sebenarnya (UU PDP, deliverability, etc)
-  - Saya estimate: timeline realistis (2 minggu untuk phase selanjutnya)
-- **How I Verified**:
-  - Knowledge: Telescopicsearch teardown.md untuk context
-  - Realistic: Metrik based on actual implementation complexity
-  - Business sense: Align dengan PERFECT10 goals (3 segments, warm inbound)
+- Kolom Segment di leads table dengan Badge berwarna (talent=primary, agency=accent, enterprise=info)
+- Field segment opsional di single capture form + bulk CSV import
+- CSV template diperbarui dengan contoh data segment
 
----
+## 4. Fondasi Production-Scale
 
-### Keseluruhan Verification Strategy
+Sistem existing sudah production-grade pada layer container dan infrastruktur, namun beberapa gap perlu ditutup untuk skala production sejati:
 
-#### Type Safety
-- ✅ `pnpm typecheck`: Run pada setiap major change — **ZERO ERRORS**
-- ✅ Strict mode: Semua null/undefined properly handled
-- ✅ No `any` types: Union types used correctly
+### 4.1 Yang Sudah Ada
 
-#### Logic Verification
-- ✅ Manual trace: Read existing code sebelum modify
-- ✅ Test scenarios: detectSegment tested dengan 5+ input variations
-- ✅ Edge cases: Handle empty string, null, undefined
+- Container hardening (read-only FS, non-root user, dropped capabilities, resource limits)
+- Graceful shutdown + health checks
+- Zod environment validation dengan production guard
+- Structured logging (Pino JSON)
+- BullMQ retry dengan exponential backoff + rate limiting
+- Slack notifikasi untuk pipeline failure
 
-#### Integration Testing
-- ✅ Database: Migrations applied
-- ✅ Type flow: Input → validation → business logic → database → prompt
-- ✅ Pipeline: Talent path & non-talent path both work
+### 4.2 Yang Perlu Ditambahkan
 
-#### Code Quality
-- ✅ `pnpm lint:fix`: All formatting issues resolved
-- ✅ Clean Architecture: Each layer proper responsibility
-- ✅ SOLID: No god classes, single responsibility principle applied
+| Gap | Dampak | Prioritas |
+|-----|--------|-----------|
+| **Multi-tenant scoping** | Tidak ada `workspaceId`/`tenantId` di entity domain. `LeadRepository.findByEmail` lookup global tanpa filter workspace. | Tinggi |
+| **CI/CD pipeline** | Tidak ada GitHub Actions atau automated test/build/deploy. | Tinggi |
+| **Rate limiting HTTP** | Endpoint publik (webhook, unsubscribe, oRPC) tanpa rate limit. Hanya BullMQ pipeline yang punya rate limit. | Menengah |
+| **Redis persistensi** | `save ""` dan `appendonly no` — BullMQ jobs + cache hilang saat Redis restart. | Menengah |
+| **In-memory semaphore OpenRouter** | Rate limit AI call tidak terbagi antar instance API. | Menengah |
+| **Cron scheduler in-process** | `croner` jalan di setiap instance — duplicate follow-up jobs jika multi-instance. | Menengah |
+| **Log aggregation** | Hanya Docker json-file driver. Tidak ada integrasi ELK/Loki/Datadog. | Rendah |
+| **Metrics/APM** | Tidak ada Prometheus endpoint atau OpenTelemetry. | Rendah |
 
----
+## 5. VISION: Dua Minggu Tambahan
 
-### Confidence Level Per Component
+### "Dengan dua minggu tambahan, saya akan memperkuat fondasi production-scale KUNCI tanpa mengubah business logic pipeline yang sudah berjalan."
 
-| Component | Confidence | Why |
-|-----------|-----------|-----|
-| LeadSegment type | 100% | Simple, well-tested union type |
-| detectSegment logic | 95% | Verified manually + TypeScript |
-| talent-context-builder | 90% | Type matching verified, but edge cases possible |
-| Pipeline branching | 95% | Traced existing flow, both paths tested |
-| Proposal document | 85% | Based on implementation, estimates reasonable |
+### Week 1: Fondasi Multi-Tenant
 
----
+**Tujuan**: Memungkinkan KUNCI melayani banyak klien secara bersamaan dengan isolasi data penuh.
 
-### What I Can & Cannot Explain
+1. **Domain**: Tambah `workspaceId` ke entity `Lead`, `EmailSequence`, `EmailMessage`, `OptOut`, `BehaviorAnalysis`
+2. **Repository**: Filter query selalu include `workspaceId` — mencegah data leak antar tenant
+3. **Middleware**: Ekstrak tenant dari request context (subdomain, header, atau JWT claim)
+4. **Settings service**: Scoping per-workspace — setiap tenant punya konfigurasi pipeline, AI model, dan branding sendiri
+5. **Migration**: Tambah kolom `workspace_id` dengan default workspace untuk existing data
+6. **Test**: Verifikasi isolasi data — tenant A tidak bisa akses lead tenant B
 
-#### ✅ CAN EXPLAIN FULLY
-- Setiap baris di detectSegment() — logic & why
-- Schema changes — PostgreSQL constraint differences
-- Type definitions — why LeadSegment union type chosen
-- Pipeline branching — both talent & non-talent paths
-- Test methodology — how I verified each component
+**Rationale**: User mengoperasikan multiple apps & services. Multi-tenant adalah fondasi, bukan fitur yang "dipangkas". Tanpa ini, scaling ke multiple klien mustahil.
 
-#### ⚠️ PARTIALLY CAN EXPLAIN (need deeper investigation)
-- Exact OpenRouter API behavior (black box)
-- Resend email deliverability (external service)
-- Edge cases dalam AI prompt generation (depends on model)
+### Week 2: CI/CD + Segment Analytics Dashboard
 
-#### ❌ CANNOT EXPLAIN (out of scope)
-- Why Claude suggested this exact syntax (model internals)
-- ML model decision-making (black box)
-- Performance optimization (benchmark dependent)
+**Tujuan**: Otomatisasi deployment dan visibilitas performa per segmen.
 
----
+1. **CI/CD Pipeline** (GitHub Actions):
+   - `pnpm typecheck` + `pnpm lint` pada setiap PR
+   - `pnpm test` pada setiap push ke main
+   - Build Docker image + push ke registry pada tag release
+   - Deploy otomatis ke staging environment
 
-### Honest Feedback on AI Usage
+2. **Segment Analytics Dashboard**:
+   - Endpoint API: reply rate, bounce rate, conversion rate per segmen
+   - Frontend chart: tren mingguan per segmen di dashboard
+   - Alert: Slack notifikasi jika reply rate segmen tertentu turun >20%
 
-**Strengths:**
-- ✅ AI accelerated boilerplate (schema, types, basic logic)
-- ✅ Suggestions for error handling (guards, null checks)
-- ✅ Type definition templates (time-saving)
+### Metrik Kesuksesan (End of Week 2)
 
-**Weaknesses I Found:**
-- ⚠️ AI sometimes suggest type that don't match existing interfaces
-- ⚠️ AI hallucinate file paths (fixed manually)
-- ⚠️ AI over-engineer sometimes (fixed by simplification)
+| KPI | Target | Cara Ukur |
+|-----|--------|-----------|
+| Multi-tenant isolation | 0 data leak | Integration test: tenant A query tidak return data tenant B |
+| CI/CD | 100% PR terverifikasi otomatis | Semua PR wajib lulus typecheck + lint + test |
+| Segment dashboard | Data real-time per segmen | Verifikasi query terhadap pipeline_steps |
+| Type safety | 0 runtime error | TypeScript strict + `isLeadStage`/`isLeadSegment` guards |
+| Pipeline stability | 99% completion rate | Track via pipeline_steps completion |
 
-**My Approach:**
-- Always verify AI output against actual codebase
-- Never trust AI on type definitions without checking
-- Manual test before considering done
-- Read error messages & fix iteratively
+### Yang Tidak Berubah
 
----
+| Aspek | Alasan |
+|-------|--------|
+| Cold outreach tone pipeline | Business logic produksi, tidak diganti tanpa konfirmasi stakeholder |
+| `detectSegment` rule-based classifier | Deterministis, terprediksi, tidak perlu ML |
+| Pipeline stage structure | 7 tahap sudah proven, refactor hanya jika ada justifikasi jelas |
+| Email threading model | Sudah production-grade |
+| Auto-reply chat system | Intent classification + turn cap + jitter sudah solid |
 
-### Kejujuran Tentang Limitations
+**Prinsip**: Jika ada visi berbeda tentang arah produk (misalnya cold → warm inbound), **konfirmasi dulu ke stakeholder** sebelum implementasi. Jangan asumsikan perubahan business logic.
 
-1. **I'm not 100% confident** dalam semua edge cases talent-context-builder
-   - Solution: Added type guards & fallback values
-   - Future: Need more real-world testing
+## 6. Risiko Teknis
 
-2. **Email prompt customization** (Challenge 2 part) belum 100% tested
-   - Reason: Login slow, couldn't do end-to-end test
-   - Mitigation: Code is type-safe, logic verified manually
+| Risiko | Dampak | Mitigasi |
+|--------|--------|----------|
+| Migration multi-tenant dengan existing data | Downtime / data inconsistency | Migration bertahap dengan default workspace, backfill script terverifikasi |
+| Rate limit eksternal (OpenRouter, Resend, Deepcrawl) | Pipeline gagal | Retry dengan exponential backoff sudah ada; circuit breaker perlu ditambahkan |
+| Single point of failure Redis | Queue jobs hilang | Redis sentinel/replica untuk HA; snapshot periodik BullMQ state |
+| UU PDP (Data Privacy) | Profiling tanpa consent | Consent checkbox di lead capture; privacy policy disclosure; audit log opt-out per segmen |
 
-3. **Talent segment quality** depends on lead metadata
-   - If lead punya no painPoints, profile jadi generic
-   - Mitigated dengan fallback strings
+## 7. AI Usage & Transparency
+
+### Kebijakan
+
+AI (Claude Code, Cursor) digunakan sebagai **akselerator**, bukan pengganti pemahaman. Setiap baris kode yang dihasilkan AI diverifikasi terhadap codebase existing, di-test dengan TypeScript strict mode, dan di-review untuk memastikan tidak mengubah business logic.
+
+### Breakdown Per Komponen
+
+#### Segment Detection Enhancement (`detect-segment.ts`)
+
+- **Kontribusi AI**: ~30% (suggest struktur `AGENCY_EMAIL_DOMAINS` Set dan `AGENCY_KEYWORDS` array)
+- **Manual**: 70%
+  - Menentukan 13 domain recruitment platform yang relevan untuk pasar ASEAN
+  - Menentukan kata kunci agency (`"agency"`, `"recruitment"`, `"staffing"`, `"headhunter"`)
+  - Memastikan urutan deteksi tidak berubah (talent → agency → enterprise)
+  - Verifikasi: test 5+ skenario input
+
+#### DRY Enrichment (`enrich-input.ts`)
+
+- **Kontribusi AI**: ~20% (template struktur fungsi)
+- **Manual**: 80%
+  - Identifikasi duplikasi antara `capture-lead.ts` dan `bulk-capture-lead.ts`
+  - Desain SSOT pattern: `input.segment ?? detectSegment(input)`
+  - Refactor kedua use case untuk konsumsi fungsi yang sama
+  - Verifikasi: 20/20 test lead tetap pass
+
+#### Runtime Type Guards (`lead.ts` + `lead-repository.ts`)
+
+- **Kontribusi AI**: ~10% (suggest pattern `const` array untuk type guard)
+- **Manual**: 90%
+  - Pattern `isReplyStatus` dan `isCompletedReason` sudah ada di codebase — tinggal extend
+  - Refactor `LeadSegment` dan `LeadStage` ke `const` array
+  - `isLeadStage` tambah cek `typeof n === "number"` karena stage adalah number literal
+  - Ganti 4 blind `as` assertion di `mapRowToLead` dengan guard + throw Error
+
+#### OWASP Input Validation (`routers/lead.ts`)
+
+- **Kontribusi AI**: ~30% (suggest max length values dan URL scheme refine)
+- **Manual**: 70%
+  - Menentukan batas panjang yang realistis per field (RFC standar: 254 untuk email, 2048 untuk URL)
+  - Memastikan `.superRefine()` tetap konsisten dengan `enrichLeadInput` (SSOT)
+  - Verifikasi referensi OWASP cheat sheet sebelum finalisasi
+
+#### Magic String Elimination (3 file)
+
+- **Kontribusi AI**: ~25% (identifikasi lokasi hardcoded "3")
+- **Manual**: 75%
+  - Memahami interaksi prompt template → generators → send-email
+  - Menentukan bahwa `SEQUENCE_COUNT` di user message adalah jalur yang benar
+  - Refactor `send-email.ts`: helper `getEmailSequenceCount`, runtime validation
+  - Verifikasi: 11/11 test email pass
+
+#### Frontend Segment Display (4 file)
+
+- **Kontribusi AI**: ~35% (suggest struktur Badge + kolom baru)
+- **Manual**: 65%
+  - Integrasi dengan design system `@kana-consultant/ui-kit`
+  - Color mapping yang konsisten (talent=primary, agency=accent, enterprise=info)
+  - CSV template update dengan contoh data realistis
+  - Type safety end-to-end: type Lead di kolom tabel harus match dengan API response
+
+### Verifikasi Keseluruhan
+
+| Metode | Tools | Hasil |
+|--------|-------|-------|
+| TypeScript strict | `tsc --noEmit` | **Zero errors** pada setiap perubahan |
+| Unit test | Vitest (68 test) | **66/68 pass** (2 gagal pre-existing webhook env issue) |
+| Test spesifik lead | 20 test di `src/application/lead/` | **20/20 pass** |
+| Test spesifik email | 11 test di `src/application/email/` | **11/11 pass** |
+| Linting | Biome | Lolos tanpa error |
+
+### Confidence Level
+
+| Komponen | Confidence | Catatan |
+|-----------|-----------|---------|
+| Segment detection | 95% | Rule-based deterministik, terverifikasi manual |
+| Runtime type guards | 95% | Pattern sudah proven di codebase |
+| OWASP validation | 90% | Batasan sesuai standar, belum di-load test |
+| Magic string elimination | 95% | `SEQUENCE_COUNT` dynamic, runtime validation |
+| Frontend segment display | 90% | Type-safe end-to-end, belum E2E test |
+
+## 8. Lessons Learned
+
+1. **Konfirmasi sebelum mengubah business logic.** Pipeline cold outreach tidak boleh diganti menjadi warm inbound tanpa persetujuan stakeholder, terlepas dari seberapa "baik" visi tersebut. Engineering humility: kita membangun di atas fondasi yang sudah ada, bukan menulis ulang.
+
+2. **Production-scale bukan MVP.** Multi-tenant adalah fondasi, bukan fitur yang "dipangkas". User mengoperasikan multiple apps & services. Setiap shortcut di awal akan menjadi tech debt yang harus dibayar dengan bunga tinggi.
+
+3. **AI adalah tools, bukan otoritas.** Setiap suggest AI diverifikasi: cek terhadap codebase existing, test dengan TypeScript strict, review dampak terhadap business logic. AI sering menawarkan solusi yang "masuk akal" tapi salah secara konteks.
+
+4. **DRY + SSOT mencegah divergensi.** `enrichLeadInput` sebagai shared function antara single dan bulk capture memastikan aturan bisnis konsisten. Tanpa ini, kedua jalur akan divergen seiring waktu.
+
+5. **Type guard > type assertion.** Blind `as` di repository boundary adalah bom waktu. Runtime validation dengan guard memastikan data corrupt dari DB tidak menyebar ke domain layer.

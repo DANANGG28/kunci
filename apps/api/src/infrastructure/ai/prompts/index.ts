@@ -36,7 +36,7 @@ CRITICAL RULES:
 - If no sender info is provided, write in general terms without placeholders
 - Mention specific benefits from the offerings that address the lead's challenges
 
-Generate a 3-email nurturing sequence. Each email must have:
+Generate an email nurturing sequence. The number of emails in the sequence and their timing will be provided separately. Each email must have:
 - A distinct purpose with escalating urgency while maintaining authenticity
 - 3 subject line variations (different hooks/angles)
 - Professional yet personalized content
@@ -44,9 +44,7 @@ Generate a 3-email nurturing sequence. Each email must have:
 - Appropriate timing between emails
 - A specific psychological trigger
 
-Email 1: Introduction & value proposition (Day 1)
-Email 2: Social proof & deeper engagement (Day 5)
-Email 3: Urgency & final offer (Day 9)
+Each email should have a distinct purpose with escalating urgency.
 
 Write content that sounds human, NOT robotic. Use the lead's specific context.`
 
